@@ -1,0 +1,438 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+
+   <service verb="get" noun="BillingDetails">
+        <in-parameters>
+            <parameter name="orderId" />
+        </in-parameters>
+        <out-parameters>
+            <parameter name="bilingDeatils"/>
+
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderContactMech" value-field="orderContactMech">
+                    <field-map field-name="orderId" from="context.orderId" />
+                    <field-map field-name="contactMechPurposeTypeId" value="BILLING_LOCATION" />
+            </entity-find-one>
+            <if condition="orderContactMech" >
+                <if condition="orderContactMech.contactMechPurposeTypeId == 'BILLING_LOCATION' " >
+                    <entity-find-one entity-name="org.apache.ofbiz.party.contact.PostalAddress" value-field="postalAddress">
+                        <field-map field-name="contactMechId" from="orderContactMech.contactMechId" />
+                        <select-field field-name="address1"/>
+                        <select-field field-name="city"/>
+                        <select-field field-name="address2"/>
+                        <select-field field-name="toName"/>
+                        <select-field field-name="countryGeoId"/>
+                    </entity-find-one>
+                    <entity-find-one entity-name="moqui.basic.Geo" value-field="geo">
+                        <field-map field-name="geoId" from="postalAddress.countryGeoId"/>
+                        <field-map field-name="geoCode"/>
+                    </entity-find-one>
+                </if>
+            </if>
+                <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderContactMech" value-field="orderContactMech">
+                    <field-map field-name="orderId" from="context.orderId" />
+                    <field-map field-name="contactMechPurposeTypeId" value="BILLING_EMAIL" />
+                </entity-find-one>
+            <if condition="orderContactMech" >
+                <if condition="orderContactMech.contactMechPurposeTypeId == 'BILLING_EMAIL' " >
+                    <entity-find-one entity-name="org.apache.ofbiz.party.contact.ContactMech" value-field="contactMechEmail">
+                        <field-map field-name="contactMechId" from="orderContactMech.contactMechId" />
+                        <select-field field-name="infoString"/>
+                    </entity-find-one>
+                </if>
+
+            </if>
+                <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderContactMech" value-field="orderContactMech">
+                    <field-map field-name="orderId" from="context.orderId" />
+                    <field-map field-name="contactMechPurposeTypeId" value="PHONE_BILLING" />
+                </entity-find-one>
+            <if condition="orderContactMech" >
+                <if condition="orderContactMech.contactMechPurposeTypeId == 'PHONE_BILLING' " >
+                    <entity-find-one entity-name="org.apache.ofbiz.party.contact.TelecomNumber" value-field="telecomNumber">
+                        <field-map field-name="contactMechId" from="orderContactMech.contactMechId" />
+                        <select-field field-name="contactNumber"/>
+                    </entity-find-one>
+                </if>
+            </if>
+
+            <set field="phone" from="[
+            contactNumber : telecomNumber?.contactNumber
+            ]" />
+
+            <set field="bilingDeatils" from="[
+            city : postalAddress?.city,
+            phone : phone,
+            email : contactMechEmail?.infoString,
+            toName : postalAddress?.toName,
+            address1 : postalAddress?.address1,
+            address2 : postalAddress?.address2,
+            countryGeoCode : geo?.geoId
+            ]"/>
+        </actions>
+   </service>
+
+<!-- Service for fetching payment related data -->
+     <service verb="get" noun="PaymentDetails">
+        <in-parameters>
+            <parameter name="orderId" />
+        </in-parameters>
+        <out-parameters>
+            <parameter name="paymentDetails" />
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderPaymentPreference" value-field="orderPaymentPreference">
+                <field-map field-name="orderId" from="context.orderId" />
+                <select-field field-name="maxAmount"/>
+                <select-field field-name="orderId"/>
+                <select-field field-name="paymentMethodTypeId"/>
+                <select-field field-name="statusId"/>
+            </entity-find-one>
+            <if condition="orderPaymentPreference.statusId != 'PAYMENT_REFUNDED'">
+                <set field="paymentDetails" from="[
+                    amount : orderPaymentPreference.maxAmount,
+                    orderId : orderPaymentPreference.orderId,
+                    paymentMethodTypeId : orderPaymentPreference.paymentMethodTypeId
+
+                ]"/>
+                <else>
+                    <set field="paymentDetails" from="[:]"/>
+                </else>
+            </if>
+        </actions>
+     </service>
+    
+<!-- Service to calculate grand total -->
+ <service verb="get" noun="GrandTotal">
+     <in-parameters>
+         <parameter name="orderId"/>
+     </in-parameters>
+     <out-parameters>
+         <parameter name="grandTotal" />
+     </out-parameters>
+     <actions>
+         <entity-find entity-name="org.apache.ofbiz.order.order.OrderItem" list="orderItem" >
+             <econdition field-name="orderId" from="context.orderId" />
+             <econdition field-name="statusId" operator="not-equals" value="ITEM_CANCELLED"/>
+         </entity-find>
+         <set field="totalAdjustment" value="0"/>
+         <iterate list="orderItem" entry="orderitem">
+             <entity-find entity-name="org.apache.ofbiz.order.order.OrderAdjustment" list="ordeadjust">
+                 <econdition field-name="orderId" from="orderitem.orderId" />
+                 <econdition field-name="orderItemSeqId" from="orderitem.orderItemSeqId"/>
+             </entity-find>
+             <iterate list="ordeadjust" entry="adj">
+                     <set field="totalAdjustment" type="Integer" from="totalAdjustment + adj.amount"/>
+             </iterate>
+         </iterate>
+         <entity-find entity-name="org.apache.ofbiz.order.order.OrderItem" list="orderItem">
+             <econdition field-name="orderId" from="context.orderId" />
+             <econdition field-name="statusId" operator="not-equals" value="ITEM_CANCELLED"/>
+         </entity-find>
+         <if condition="orderItem">
+             <set field="itemTotalPrice" value="0" type="Integer"/>
+             <iterate list="orderItem" entry="orderitem">
+                 <set field="itemTotalPrice" from = "itemTotalPrice+orderitem.unitPrice"/>
+             </iterate>
+         </if>
+         <entity-find entity-name="org.apache.ofbiz.order.order.OrderAdjustment" list="orderAdjustment">
+             <econdition field-name="orderId" from="context.orderId"/>
+             <econdition field-name="orderItemSeqId" operator="equals" value="_NA_"/>
+         </entity-find>
+         <set field="orderAdjustmentPrice" type="Integer" value="0"/>
+         <if condition="orderAdjustment">
+             <iterate list="orderAdjustment" entry="orderajustment">
+                 <set field="orderAdjustmentPrice" from="orderAdjustmentPrice + orderajustment.amount"/>
+             </iterate>
+         </if>
+         <set field="grandTotal"  from="totalAdjustment + itemTotalPrice + orderAdjustmentPrice" type="Integer"/>
+     </actions>
+ </service>
+    
+<!--    Service for fetch shipment information-->
+    <service verb="get" noun="CommanDetails">
+        <in-parameters>
+            <parameter name="orderId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="finalData"/>
+            <parameter name="goodIdentificationList"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="org.apache.ofbiz.order.order.OrderItem" list="OrderList">
+                <econdition field-name="orderId" from="context.orderId"/>
+                <econdition field-name="statusId" operator="not-equals" value="ITEM_CANCELLED"/>
+                <select-field field-name="orderId"/>
+                <select-field field-name="orderItemSeqId"/>
+                <select-field field-name="statusId"/>
+                <select-field field-name="unitPrice"/>
+                <select-field field-name="quantity"/>
+                <select-field field-name="shipGroupSeqId"/>
+                <select-field field-name="productId"/>
+            </entity-find>
+
+
+            <iterate list="OrderList" entry="oi">
+                <entity-find entity-name="org.apache.ofbiz.order.order.OrderItemShipGroup" list="orderItemShipGroup">
+                    <econdition field-name="orderId" from="oi.orderId"/>
+                    <econdition field-name="shipGroupSeqId" from="oi.shipGroupSeqId"/>
+                    <select-field field-name="shipmentMethodTypeId"/>
+                    <select-field field-name="facilityId"/>
+                </entity-find>
+                <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderStatus" value-field="orderStatus">
+                    <field-map field-name="orderId" from="context.orderId"/>
+                    <field-map field-name="orderItemSeqId" from="oi.orderItemSeqId"/>
+                    <field-map field-name="statusId" value="ITEM_COMPLETED"/>
+                </entity-find-one>
+
+                <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderShipment" value-field="orderShipment">
+                    <field-map field-name="orderItemSeqId" from="oi.orderItemSeqId"/>
+                    <field-map field-name="shipGroupSeqId" from="oi.shipGroupSeqId"/>
+                </entity-find-one>
+                
+                <entity-find-one entity-name="org.apache.ofbiz.shipment.shipment.ShipmentItem" value-field="shipmentItem">
+                    <field-map field-name="shipmentId" from="orderShipment.shipmentId" />
+                    <field-map field-name="shipmentItemSeqId" from="orderShipment.shipmentItemSeqId"/>
+                    <select-field field-name="shipmentId"/>
+                    <select-field field-name="productId"/>
+                    <select-field field-name="shipmentItemSeqId"/>
+                </entity-find-one>
+
+                <entity-find entity-name="org.apache.ofbiz.shipment.shipment.Shipment" list="shipment">
+                    <econdition field-name="shipmentId" from="shipmentItem.shipmentId"/>
+                    <econditions combine="or">
+                        <econdition field-name="statusId" operator="equals" value="SHIPMENT_PACKED"/>
+                        <econdition field-name="statusId" operator="equals" value="SHIPMENT_SHIPPED"/>
+                    </econditions>
+                    <select-field field-name="statusId"/>
+                    <select-field field-name="shipmentId"/>
+                    <select-field field-name="shipmentMethodTypeId"/>
+
+                </entity-find>
+                <iterate list="orderItemShipGroup" entry="oisg">
+                    <entity-find-one entity-name="org.apache.ofbiz.product.facility.Facility" value-field="facility">
+                        <field-map field-name="facilityId" from="oisg.facilityId" />
+                        <select-field field-name="externalId"/>
+                        <select-field field-name="facilityId"/>
+                        <select-field field-name="facilityTypeId"/>
+                    </entity-find-one>
+                    <entity-find-one entity-name="org.apache.ofbiz.product.facility.FacilityType" value-field="facilityType">
+                        <field-map field-name="facilityTypeId" from="facility.facilityTypeId"/>
+                        <field-map field-name="parentTypeId" value="PHYSICAL_STORE"/>
+                        <select-field field-name="facilityTypeId"/>
+                        <select-field field-name="parentTypeId"/>
+                    </entity-find-one>
+                 </iterate>
+                <entity-find-one entity-name="org.apache.ofbiz.product.product.Product" value-field="product">
+                    <field-map field-name="productId" from="oi.productId"/>
+                    <select-field field-name="productId"/>
+                    <select-field field-name="internalName"/>
+                </entity-find-one>
+                <entity-find-one entity-name="org.apache.ofbiz.product.product.ProductType" value-field="productType">
+                    <field-map field-name="productTypeId" from="product.productTypeId"/>
+                </entity-find-one>
+
+                <!--OrderItemajustments-->
+                <entity-find entity-name="org.apache.ofbiz.order.order.OrderAdjustment" list="orderAdjustment">
+                    <econdition field-name="orderId" from="context.orderId"/>
+                    <econdition field-name="orderItemSeqId" from="oi.orderItemSeqId"/>
+                    <select-field field-name="amount"/>
+                    <select-field field-name="orderId"/>
+                    <select-field field-name="orderItemSeqId"/>
+                    <select-field field-name="orderAdjustmentTypeId"/>
+                </entity-find>
+
+
+                <!-- Good idenification data fetch -->
+                <entity-find entity-name="org.apache.ofbiz.product.product.GoodIdentification" list="goodIdentification">
+                    <econdition field-name="productId" from="shipmentItem.productId"/>
+                    <econditions combine="or">
+                    <econdition field-name="thruDate" operator="equals" value="null" or-null="true"/>
+                    <econdition field-name="thruDate" operator="greater" from="basisTimestamp"/>
+                    </econditions>
+                </entity-find>
+
+<!--                <set field="goodIdentificationList" value="[]"/>-->
+<!--                <iterate list="goodIdentification" entry="GI">-->
+<!--                    <set field="filterlist" from="[-->
+<!--                    idValue : GI.idValue,-->
+<!--                    goodIdentificationTypeId : GI.goodIdentificationTypeId,-->
+<!--                    productId : GI.productId-->
+<!--                    ]"/>-->
+<!--                    <set field="goodIdentificationList" from="goodIdentificationList+filterlist"/>-->
+<!--                </iterate>-->
+                <entity-find-one value-field="orderHeader" entity-name="org.apache.ofbiz.order.order.OrderHeader">
+                    <field-map field-name="orderId" from="context.orderId"/>
+                    <select-field field-name="orderDate"/>
+                    <select-field field-name="productStoreId"/>
+                    <select-field field-name="orderId"/>
+                    <select-field field-name="orderName"/>
+                    <select-field field-name="orderTypeId"/>
+                    <select-field field-name="statusId"/>
+                    <select-field field-name="entryDate"/>
+                    <select-field field-name="grandTotal"/>
+                    <select-field field-name="externalId"/>
+                </entity-find-one>
+                <service-call name="retailpro.SqlServices.get#ShipmentDetails" in-map="context" out-map="shipto"/>
+                <service-call name="retailpro.SqlServices.get#BillingDetails" in-map="context" out-map="bilingDeatils"/>
+                <service-call name="retailpro.SqlServices.get#PaymentDetails" in-map="context" out-map="paymentDetails"/>
+                <service-call name="retailpro.SqlServices.get#OrderAdjustmentDetails" in-map="context" out-map="orderAdjustment1"/>
+                <service-call name="retailpro.SqlServices.get#GrandTotal" in-map="context" out-map="grandTotal"/>
+                <set field="shipment" from="[
+                    goodIdentifications : [goodIdentification],
+                    shipto : shipto.shipto,
+                    orderItemAdjustments : orderAdjustment,
+                    orderId : oi.orderId,
+                    orderItemSeqId : oi.orderItemSeqId,
+                    itemStatusId : oi.statusId,
+                    unitPrice : oi.unitPrice,
+                    facilityExternalId : facility.externalId,
+                    slaShipmentMethodTypeId : orderItemShipGroup[0]?.shipmentMethodTypeId,
+                    itemQuantity : oi.quantity,
+                    facilityId : facility.facilityId,
+                    facilityExternalId : facility.externalId,
+                    facilityTypeId : facilityType.facilityTypeId,
+                    parentFacilityTypeId : facilityType.parentTypeId,
+                    productId : product.productId,
+                    internalName : product.internalName,
+                    shipmentQuantity : orderShipment.quantity,
+                    shipmentId : shipmentItem.shipmentId,
+                    shipmentItemSeqId : shipmentItem.shipmentItemSeqId,
+                    shipmentStatusId : shipment[0]?.statusId,
+                    shipmentMethodTypeId : shipment[0]?.shipmentMethodTypeId,
+                    productStoreId : orderHeader.productStoreId,
+                    orderDate : orderHeader.orderDate
+            ]"/>
+
+                <set field="finalData" from="[
+
+                productStoreId : orderHeader.productStoreId,
+                orderId : orderHeader.orderId,
+                orderName : orderHeader.orderName,
+                orderDate : orderHeader.orderDate,
+                orderTypeId : orderHeader.orderTypeId,
+                orderStatusId : orderHeader.statusId,
+                entryDate : orderHeader.entryDate,
+                grandTotal1 : orderHeader.grandTotal,
+                grandTotal : grandTotal.grandTotal,
+                orderExternalId : orderHeader.externalId,
+                customerInfo : bilingDeatils.bilingDeatils,
+                paymentInfo : [paymentDetails],
+                orderAdjustment : orderAdjustment1.orderAdjustment,
+                shipments    :     [shipment]
+                            ]"/>
+            </iterate>
+        </actions>
+    </service>
+
+<!-- Shipment details -->
+    <service verb="get" noun="ShipmentDetails">
+        <in-parameters>
+            <parameter name="orderId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="shipto"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderItemShipGroup" value-field="orderItemShipGroup">
+                <field-map field-name="orderId" from="context.orderId"/>
+            </entity-find-one>
+            <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderContactMech" value-field="orderContactMech">
+                <field-map field-name="orderId" from="context.orderId" />
+                <field-map field-name="contactMechPurposeTypeId" value="SHIPPING_LOCATION" />
+            </entity-find-one>
+            <if condition="orderContactMech" >
+                <if condition="orderContactMech.contactMechPurposeTypeId == 'SHIPPING_LOCATION' " >
+                    <entity-find-one entity-name="org.apache.ofbiz.party.contact.PostalAddress" value-field="postalAddress">
+                        <field-map field-name="contactMechId" from="orderContactMech.contactMechId" />
+                        <select-field field-name="address1"/>
+                        <select-field field-name="city"/>
+                        <select-field field-name="address2"/>
+                        <select-field field-name="toName"/>
+                    </entity-find-one>
+                    <set field="toName" from="postalAddress.toName"/>
+                    <set field="city" from="postalAddress.city"/>
+                    <set field="address1" from="postalAddress.address1"/>
+                    <set field="address2" from="postalAddress.address2"/>
+                    <else>
+                        <if condition="orderItemShipGroup.shipmentMethodTypeId == 'STOREPICKUP'">
+                            <set field="toName" from="orderItemShipGroup.toName"/>
+                            <set field="city" from="postalAddress.city"/>
+                            <set field="address1" from="postalAddress.addressf1"/>
+                            <set field="address2" from="postalAddress.address2"/>
+                        </if>
+                    </else>
+                </if>
+            </if>
+            <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderContactMech" value-field="orderContactMech">
+                <field-map field-name="orderId" from="context.orderId" />
+                <field-map field-name="contactMechPurposeTypeId" value="SHIPPING_EMAIL" />
+            </entity-find-one>
+            <if condition="orderContactMech" >
+                <if condition="orderContactMech.contactMechPurposeTypeId == 'SHIPPING_EMAIL' " >
+                    <entity-find-one entity-name="org.apache.ofbiz.party.contact.ContactMech" value-field="contactMechEmail">
+                        <field-map field-name="contactMechId" from="orderContactMech.contactMechId" />
+                        <select-field field-name="infoString"/>
+                    </entity-find-one>
+                    <set field="infoString" from="contactMechEmail.infoString"/>
+                    <else>
+                        <if condition="orderItemShipGroup.shipmentMethodTypeId == 'STOREPICKUP'">
+                            <set field="infoString" from="orderItemShipGroup.email"/>
+                        </if>
+                    </else>
+                </if>
+            </if>
+            <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderContactMech" value-field="orderContactMech">
+                <field-map field-name="orderId" from="context.orderId" />
+                <field-map field-name="contactMechPurposeTypeId" value="PHONE_BILLING" />
+            </entity-find-one>
+            <if condition="orderContactMech" >
+                <if condition="orderContactMech.contactMechPurposeTypeId == 'PHONE_SHIPPING' " >
+                    <entity-find-one entity-name="org.apache.ofbiz.party.contact.TelecomNumber" value-field="telecomNumber">
+                        <field-map field-name="contactMechId" from="orderContactMech.contactMechId" />
+                        <select-field field-name="contactNumber"/>
+                    </entity-find-one>
+                    <set field="phone" from="telecomNumber.contactNumber"/>
+                    <else>
+                        <if condition="orderItemShipGroup.shipmentMethodTypeId == 'STOREPICKUP'">
+                            <set field="infoString" from="orderItemShipGroup.phone"/>
+                        </if>
+                    </else>
+                </if>
+            </if>
+            <set field="phone" from="[
+            contactNumber : telecomNumber?.contactNumber
+            ]" />
+
+            <set field="shipto" from="[
+            city : postalAddress?.city,
+            phone : phone,
+            email : contactMechEmail?.infoString,
+            toName : postalAddress?.toName,
+            address1 : postalAddress?.address1,
+            address2 : postalAddress?.address2,
+            countryGeoCode : geo?.GeoId
+            ]"/>
+        </actions>
+    </service>
+    
+    <!-- Service to fetch the order adjustment -->
+    <service verb="get" noun="OrderAdjustmentDetails">
+        <in-parameters>
+            <parameter name="orderId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="orderAdjustment"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="org.apache.ofbiz.order.order.OrderAdjustment" list="orderAdjustment">
+                <econdition field-name="orderId" from="context.orderId"/>
+                <econdition field-name="orderItemSeqId" value="_NA_"/>
+                <select-field field-name="amount"/>
+                <select-field field-name="orderId"/>
+                <select-field field-name="orderItemSeqId"/>
+                <select-field field-name="orderAdjustmentTypeId"/>
+            </entity-find>
+        </actions>
+    </service>
+</services>
