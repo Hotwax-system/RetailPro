@@ -253,15 +253,6 @@
                     </econditions>
                 </entity-find>
 
-<!--                <set field="goodIdentificationList" value="[]"/>-->
-<!--                <iterate list="goodIdentification" entry="GI">-->
-<!--                    <set field="filterlist" from="[-->
-<!--                    idValue : GI.idValue,-->
-<!--                    goodIdentificationTypeId : GI.goodIdentificationTypeId,-->
-<!--                    productId : GI.productId-->
-<!--                    ]"/>-->
-<!--                    <set field="goodIdentificationList" from="goodIdentificationList+filterlist"/>-->
-<!--                </iterate>-->
                 <entity-find-one value-field="orderHeader" entity-name="org.apache.ofbiz.order.order.OrderHeader">
                     <field-map field-name="orderId" from="context.orderId"/>
                     <select-field field-name="orderDate"/>
@@ -285,9 +276,10 @@
                 <service-call name="retailpro.SqlServices.get#PaymentDetails" in-map="context" out-map="paymentDetails"/>
                 <service-call name="retailpro.SqlServices.get#OrderAdjustmentDetails" in-map="context" out-map="orderAdjustment1"/>
                 <service-call name="retailpro.SqlServices.get#GrandTotal" in-map="context" out-map="grandTotal"/>
+                <service-call name="retailpro.SqlServices.get#OrderAttributeDetails" in-map="context" out-map="orderAttributes"/>
                 <set field="shipment" from="[
                     goodIdentifications : goodIdentification,
-                    shipto : shipto.shipto,
+                    shipTo : shipto.shipto,
                     orderItemAdjustments : orderAdjustment?:null,
                     orderId : oi.orderId,
                     orderItemSeqId : oi.orderItemSeqId,
@@ -324,10 +316,11 @@
                 grandTotal : grandTotal.grandTotal,
                 saleChannelEnumId : enumeration.enumCode,
                 orderExternalId : orderHeader.externalId,
-                customerInfo : bilingDeatils.bilingDeatils,
-                paymentInfo : [paymentDetails],
-                orderAdjustment : orderAdjustment1?.orderAdjustment ?: null,
-                shipments    :     [shipment]
+                billTo : bilingDeatils.bilingDeatils,
+                orderAttributes : orderAttributes.orderAttributes,
+                payments : [paymentDetails],
+                orderAdjustments : orderAdjustment1?.orderAdjustment ?: null,
+                shipmentItems    :     [shipment]
                             ]"/>
             </iterate>
         </actions>
@@ -440,6 +433,20 @@
                 <select-field field-name="orderId"/>
                 <select-field field-name="orderItemSeqId"/>
                 <select-field field-name="orderAdjustmentTypeId"/>
+            </entity-find>
+        </actions>
+    </service>
+    
+    <service verb="get" noun="OrderAttributeDetails">
+        <in-parameters>
+            <parameter name="orderId"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="orderAttributes"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="org.apache.ofbiz.order.order.OrderAttribute" list="orderAttributes">
+                <econdition field-name="orderId" from="context.orderId"/>
             </entity-find>
         </actions>
     </service>
