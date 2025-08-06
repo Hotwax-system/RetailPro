@@ -79,6 +79,7 @@
         </in-parameters>
         <out-parameters>
             <parameter name="paymentDetails" />
+
         </out-parameters>
         <actions>
             <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderPaymentPreference" value-field="orderPaymentPreference">
@@ -115,7 +116,7 @@
              <econdition field-name="orderId" from="context.orderId" />
              <econdition field-name="statusId" operator="not-equals" value="ITEM_CANCELLED"/>
          </entity-find>
-         <set field="totalAdjustment" value="0"/>
+         <set field="totalAdjustment" value="0" type="Integer"/>
          <iterate list="orderItem" entry="orderitem">
              <entity-find entity-name="org.apache.ofbiz.order.order.OrderAdjustment" list="ordeadjust">
                  <econdition field-name="orderId" from="orderitem.orderId" />
@@ -272,6 +273,12 @@
                     <select-field field-name="entryDate"/>
                     <select-field field-name="grandTotal"/>
                     <select-field field-name="externalId"/>
+                    <select-field field-name="salesChannelEnumId"/>
+                </entity-find-one>
+                
+                <entity-find-one entity-name="moqui.basic.Enumeration" value-field="enumeration">
+                    <field-map field-name="enumId" from="orderHeader.salesChannelEnumId"/>
+                    <select-field field-name="enumCode"/>
                 </entity-find-one>
                 <service-call name="retailpro.SqlServices.get#ShipmentDetails" in-map="context" out-map="shipto"/>
                 <service-call name="retailpro.SqlServices.get#BillingDetails" in-map="context" out-map="bilingDeatils"/>
@@ -279,9 +286,9 @@
                 <service-call name="retailpro.SqlServices.get#OrderAdjustmentDetails" in-map="context" out-map="orderAdjustment1"/>
                 <service-call name="retailpro.SqlServices.get#GrandTotal" in-map="context" out-map="grandTotal"/>
                 <set field="shipment" from="[
-                    goodIdentifications : [goodIdentification],
+                    goodIdentifications : goodIdentification,
                     shipto : shipto.shipto,
-                    orderItemAdjustments : orderAdjustment,
+                    orderItemAdjustments : orderAdjustment?:null,
                     orderId : oi.orderId,
                     orderItemSeqId : oi.orderItemSeqId,
                     itemStatusId : oi.statusId,
@@ -304,8 +311,8 @@
                     orderDate : orderHeader.orderDate
             ]"/>
 
-                <set field="finalData" from="[
 
+                <set field="finalData" from="[
                 productStoreId : orderHeader.productStoreId,
                 orderId : orderHeader.orderId,
                 orderName : orderHeader.orderName,
@@ -315,10 +322,11 @@
                 entryDate : orderHeader.entryDate,
                 grandTotal1 : orderHeader.grandTotal,
                 grandTotal : grandTotal.grandTotal,
+                saleChannelEnumId : enumeration.enumCode,
                 orderExternalId : orderHeader.externalId,
                 customerInfo : bilingDeatils.bilingDeatils,
                 paymentInfo : [paymentDetails],
-                orderAdjustment : orderAdjustment1.orderAdjustment,
+                orderAdjustment : orderAdjustment1?.orderAdjustment ?: null,
                 shipments    :     [shipment]
                             ]"/>
             </iterate>
