@@ -7,13 +7,14 @@
         </in-parameters>
         <out-parameters>
             <parameter name="bilingDeatils"/>
-
         </out-parameters>
+
         <actions>
             <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderContactMech" value-field="orderContactMech">
                 <field-map field-name="orderId" from="context.orderId" />
                 <field-map field-name="contactMechPurposeTypeId" value="BILLING_LOCATION" />
             </entity-find-one>
+
             <if condition="orderContactMech" >
                 <if condition="orderContactMech.contactMechPurposeTypeId == 'BILLING_LOCATION' " >
                     <entity-find-one entity-name="org.apache.ofbiz.party.contact.PostalAddress" value-field="postalAddress">
@@ -41,7 +42,6 @@
                         <select-field field-name="infoString"/>
                     </entity-find-one>
                 </if>
-
             </if>
             <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderContactMech" value-field="orderContactMech">
                 <field-map field-name="orderId" from="context.orderId" />
@@ -79,7 +79,6 @@
         </in-parameters>
         <out-parameters>
             <parameter name="paymentDetails" />
-
         </out-parameters>
         <actions>
             <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderPaymentPreference" value-field="orderPaymentPreference">
@@ -94,7 +93,6 @@
                     amount : orderPaymentPreference.maxAmount,
                     orderId : orderPaymentPreference.orderId,
                     paymentMethodTypeId : orderPaymentPreference.paymentMethodTypeId
-
                 ]"/>
                 <else>
                     <set field="paymentDetails" from="[:]"/>
@@ -151,7 +149,7 @@
     </service>
 
     <!--    Service for fetch shipment information-->
-    <service verb="get" noun="CommanDetails">
+    <service verb="get" noun="CompleteOrderFeed">
         <in-parameters>
             <parameter name="orderId"/>
         </in-parameters>
@@ -169,7 +167,6 @@
                 <entity-find entity-name="org.apache.ofbiz.order.order.OrderItemShipGroup" list="orderItemShipGroup">
                     <econdition field-name="orderId" from="oi.orderId"/>
                     <econdition field-name="shipGroupSeqId" from="oi.shipGroupSeqId"/>
-
                 </entity-find>
                 <entity-find-one entity-name="org.apache.ofbiz.order.order.OrderStatus" value-field="orderStatus">
                     <field-map field-name="orderId" from="context.orderId"/>
@@ -249,21 +246,19 @@
 
                 <entity-find-one value-field="orderHeader" entity-name="org.apache.ofbiz.order.order.OrderHeader">
                     <field-map field-name="orderId" from="context.orderId"/>
-
+                    <field-map field-name="statusId" value="ORDER_COMPLETED"/>
                 </entity-find-one>
-
                 <entity-find-one entity-name="moqui.basic.Enumeration" value-field="enumeration">
                     <field-map field-name="enumId" from="orderHeader.salesChannelEnumId"/>
-
                 </entity-find-one>
 
-
-                <service-call name="retailpro.SqlServices.get#ShipmentDetails" in-map="context" out-map="shipto"/>
-                <service-call name="retailpro.SqlServices.get#BillingDetails" in-map="context" out-map="bilingDeatils"/>
-                <service-call name="retailpro.SqlServices.get#PaymentDetails" in-map="context" out-map="paymentDetails"/>
-                <service-call name="retailpro.SqlServices.get#OrderAdjustmentDetails" in-map="context" out-map="orderItemAdjustmentList"/>
-                <service-call name="retailpro.SqlServices.get#GrandTotal" in-map="context" out-map="grandTotal"/>
-                <service-call name="retailpro.SqlServices.get#OrderAttributeDetails" in-map="context" out-map="orderAttributeList"/>
+                <!-- Service calls to fetch the related data -->
+                <service-call name="retailpro.CompleteOrderDataFeed.get#ShipmentDetails" in-map="context" out-map="shipto"/>
+                <service-call name="retailpro.CompleteOrderDataFeed.get#BillingDetails" in-map="context" out-map="bilingDeatils"/>
+                <service-call name="retailpro.CompleteOrderDataFeed.get#PaymentDetails" in-map="context" out-map="paymentDetails"/>
+                <service-call name="retailpro.CompleteOrderDataFeed.get#OrderAdjustmentDetails" in-map="context" out-map="orderItemAdjustmentList"/>
+                <service-call name="retailpro.CompleteOrderDataFeed.get#GrandTotal" in-map="context" out-map="grandTotal"/>
+                <service-call name="retailpro.CompleteOrderDataFeed.get#OrderAttributeDetails" in-map="context" out-map="orderAttributeList"/>
 
                 <set field="shipment" from="[
                      productStoreId : orderHeader.productStoreId,

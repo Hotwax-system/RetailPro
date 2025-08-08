@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+    <service verb="get" noun="PosOrderFeedToManualApi">
+        <in-parameters>
+            <parameter name="orderMap"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="manualApiPayLoad"/>
+            <parameter name="groupedList"/>
+        </out-parameters>
+        <actions>
+         <script>
+
+             import groovy.json.JsonSlurper
+
+             def data = new JsonSlurper().parseText(context.orderMap)
+             context.orderMap = data
+             data.shipmentItems.each {
+             def valueAppend = ''
+             if (it.productStoreId == "STORE") {
+             valueAppend = 'A'
+             } else if (it.productStoreId == "CAT_STORE") {
+             valueAppend = 'C'
+             } else if (it.productStoreId == "TNF_STORE") {
+             valueAppend = 'T'
+             } else if (it.productStoreId == "HP_STORE") {
+             valueAppend = 'H'
+             } else if (it.productStoreId == "PAR2_STORE") {
+             valueAppend = 'P'
+             }
+
+             if (it.shipmentId?.startsWith("M")) {
+             it.shipmentId = valueAppend + it.shipmentId.substring(1)
+             } else {
+             it.shipmentId = valueAppend + it.shipmentId
+             }
+             }
+
+             def groupedList = data.shipmentItems
+             .groupBy { it.shipmentId }
+             .values()
+             .toList()
+
+             context.groupedList = groupedList
+
+         </script>
+            <set field="manualApiPayLoad" from="[]"/>
+            <iterate list="groupedList" entry="shipmentList">
+                <set field="totalItemQuantity" value="0" type="Integer"/>
+                <set field="Items" from="[]"/>
+                <set field="ToStore" value=""/>
+                <iterate list="shipmentList" entry="shipment">
+                    <set field="totalItemQuantity" from="totalItemQuantity+ shipment.itemQuantity"/>
+                    <iterate list="shipment.goodIdentifications" entry="goodIdentification">
+                        <if condition="goodIdentification.goodIdentificationTypeId == 'UPCA'">
+                            <set field="ItemMap" from="[
+                                UPC : goodIdentification.idValue,
+                                Qty : shipment.itemQuantity
+                            ]"/>
+                            <set field="Items" from="Items + ItemMap"/>
+                        </if>
+
+                    </iterate>
+
+                </iterate>
+                <set field="ToStore" value="" type="String"/>
+                <if condition="context.orderMap.orderAttributes != null">
+                    <iterate list="orderMap.orderAttributes" entry="orderAttribute">
+                      <if condition="orderAttribute.attrName == 'orderFacility'">
+                          <set field="ToStore" from="orderAttribute.attrValue"/>
+                      </if>
+                    </iterate>
+                </if>
+
+                    <set field="shipment" from="[
+                        SlipNo : shipmentList[0].shipmentId,
+                        OrderId : shipmentList[0].orderId,
+                        FromStore : shipmentList[0].facilityExternalId,
+                        CreatedDate : shipmentList[0].orderDate,
+                        TotalQty : totalItemQuantity
+                    ]"/>
+                <if condition="ToStore != '' || Tostore != null">
+                    <set field="shipment.ToStore" from="Tostore"/>
+                </if>
+                <if condition="Items.size() > 0">
+                    <set field="shipment.Items" from="Items"/>
+                </if>
+                
+                
+                    <set field="manualApiPayLoad" from="manualApiPayLoad + shipment"/>
+            </iterate>
+        </actions>
+    </service>
+</services>
