@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
-    <service verb="get" noun="PosOrderFeedToManualApi">
+    <service verb="get" noun="OrderFeedToManualApi">
         <in-parameters>
             <parameter name="orderMap"/>
         </in-parameters>
@@ -40,7 +40,6 @@
              .groupBy { it.shipmentId }
              .values()
              .toList()
-
              context.groupedList = groupedList
 
          </script>
@@ -49,6 +48,7 @@
                 <set field="totalItemQuantity" value="0" type="Integer"/>
                 <set field="Items" from="[]"/>
                 <set field="ToStore" value=""/>
+
                 <iterate list="shipmentList" entry="shipment">
                     <set field="totalItemQuantity" from="totalItemQuantity+ shipment.itemQuantity"/>
                     <iterate list="shipment.goodIdentifications" entry="goodIdentification">
@@ -59,36 +59,226 @@
                             ]"/>
                             <set field="Items" from="Items + ItemMap"/>
                         </if>
-
                     </iterate>
-
                 </iterate>
-                <set field="ToStore" value="" type="String"/>
-                <if condition="context.orderMap.orderAttributes != null">
-                    <iterate list="orderMap.orderAttributes" entry="orderAttribute">
-                      <if condition="orderAttribute.attrName == 'orderFacility'">
-                          <set field="ToStore" from="orderAttribute.attrValue"/>
-                      </if>
-                    </iterate>
-                </if>
 
-                    <set field="shipment" from="[
+                <set field="shipment" from="[
                         SlipNo : shipmentList[0].shipmentId,
                         OrderId : shipmentList[0].orderId,
                         FromStore : shipmentList[0].facilityExternalId,
                         CreatedDate : shipmentList[0].orderDate,
                         TotalQty : totalItemQuantity
                     ]"/>
-                <if condition="ToStore != '' || Tostore != null">
-                    <set field="shipment.ToStore" from="Tostore"/>
+
+                <set field="ToStore" value="" type="String"/>
+                <if condition="orderMap.salesChannel == 'POS_SALES_CHANNEL' ">
+                <if condition="context.orderMap.orderAttributes != null">
+                    <iterate list="orderMap.orderAttributes" entry="orderAttribute">
+                      <if condition="orderAttribute.attrName == 'orderFacility'">
+                          <set field="ToStore" from="orderAttribute.attrValue"/>
+                          <set field="shipment.ToStore" from="ToStore"/>
+                      </if>
+                    </iterate>
                 </if>
+                    <else>
+                        <set field="shipment.ToStore" from="shipmentList[0].facilityExternalId" />
+                    </else>
+                </if>
+
                 <if condition="Items.size() > 0">
                     <set field="shipment.Items" from="Items"/>
                 </if>
-                
-                
                     <set field="manualApiPayLoad" from="manualApiPayLoad + shipment"/>
             </iterate>
         </actions>
     </service>
+
+
+    <!-- Service to prepare payload to order to invoice api call -->
+    <service verb="get" noun="OrderFeedToInvoice">
+        <in-parameters>
+            <parameter name="orderMap"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="finalInvoice"/>
+        </out-parameters>
+        
+        <actions>
+            <script>
+                import groovy.json.JsonSlurper
+
+                def data = new JsonSlurper().parseText(context.orderMap)
+
+                def billingName = data.billTo.toName?.split(" ", 2)
+                context.billingFirstName = billingName ? billingName[0] : data.billTo.toName
+                context.billingLastName = billingName.size() > 1 ? billingName[1] : ""
+
+                context.orderMap = data
+
+                def groupedList = data.shipmentItems
+                .groupBy { it.shipmentId }
+                .values()
+                .toList()
+                context.groupedList = groupedList
+
+            </script>
+            <set field="InvoicingStore" value=""/>
+            <set field="finalInvoice" from="[]"/>
+            <set field="ShippingAmt" value="0" type="Integer"/>
+            <set field="noDocument" value="" type="String"/>
+            <set field="EmployeeCode" value="" type="String"/>
+            <set field="FiscalCredit" value="" type="String"/>
+            <set field="CompanyId" value="" type="String"/>
+            <set field="CompanyName" value="" type="String"/>
+            <set field="CompanyAddress" value="" type="String"/>
+            <set field="TypeDocument" value="" type="String"/>
+            
+            
+            <iterate list="orderMap.orderAttributes" entry="orderAttribute">
+
+                <if condition="orderAttribute.attrName == 'customerId'">
+                    <set field="noDocument" from="orderAttribute.attrValue"/>
+                </if>
+
+                <if condition="orderAttribute.attrName == 'employeeId'">
+                    <set field="EmployeeCode" from="orderAttribute.attrValue"/>
+                </if>
+
+                <if condition="orderAttribute.attrName == 'taxCredit'">
+                    <set field="FiscalCredit" from="orderAttribute.attrValue"/>
+                </if>
+
+                <if condition="orderAttribute.attrName == 'taxIdentificationNumber'">
+                    <set field="CompanyId" from="orderAttribute.attrValue"/>
+                </if>
+
+                <if condition="orderAttribute.attrName == 'companyName'">
+                    <set field="CompanyName" from="orderAttribute.attrValue"/>
+                </if>
+
+                <if condition="orderAttribute.attrName == 'companyAddress'">
+                    <set field="CompanyAddress" from="orderAttribute.attrValue"/>
+                </if>
+
+                <if condition="orderAttribute.attrName == 'identificationType'">
+                    <set field="TypeDocument" from="orderAttribute.attrValue"/>
+                </if>
+
+            </iterate>
+            
+            <if condition="orderMap.orderAdjustments != null">
+            <iterate list="orderMap.orderAdjustments" entry="orderAdjustment">
+                <if condition="orderAdjustment.orderAdjustmentTypeId == 'SHIPPING_CHARGES' || orderAdjustment.orderAdjustmentTypeId == 'EXT_SHIP_ADJUSTMENT' || orderAdjustment.orderAdjustmentTypeId == 'SHIPPING_SALES_TAX' ">
+                    <set field="ShippingAmt" from="ShippingAmt + orderAdjustment.amount"/>
+                </if>
+            </iterate>
+            </if>
+
+
+            <iterate list="groupedList" entry="ShipmentList">
+                <set field="price" value="0" type="Integer"/>
+                <set field="items" from="[]"/>
+                <iterate list="ShipmentList" entry="shipmentItems">
+                    <set field="itemDiscountAmount" value="0" type="Integer"/>
+                    <set field="itemSalesTax" value="0" type="Integer"/>
+                    <iterate list="shipmentItems.orderItemAdjustments" entry="orderItemAdjustments">
+                        <if condition="shipmentItems.orderItemAdjustments != null">
+                            <set field="itemDiscount" value="0"/>
+                            <iterate list="shipmentItems.orderItemAdjustments" entry="orderItemAdjustment">
+                                <if condition="orderItemAdjustment.orderAdjustmentTypeId == 'EXT_PROMO_ADJUSTMENT'">
+                                    <set field="itemDiscount" from="orderItemAdjustment.amount"/>
+                                </if>
+
+                                <set field="price" from="shipmentItems.unitPrice+itemDiscount"/>
+
+                                <if condition="orderItemAdjustments.orderAdjustmentTypeId == 'EXT_PROMO_ADJUSTMENT'">
+                                    <set field="itemDiscountAmount" from="(itemDiscountAmount + orderItemAdjustments.amount)*(-1)"/>
+                                </if>
+                                <if condition="orderItemAdjustments.orderAdjustmentTypeId == 'SALES_TAX'">
+                                    <set field="itemSalesTax" from="itemSalesTax + orderItemAdjustments.amount"/>
+                                </if>
+                            </iterate>
+                        </if>
+                        <set field="items" from="items+itemMap"/>
+                    </iterate>
+
+                    <set field="InvoicingStore" from="ShipmentList[0].facilityExternalId"/>
+                    <if condition="ShipmentList[0].shipmentMethodTypeId == 'STOREPICKUP'">
+                        <set field="DeliveryType" value="1" type="Integer"/>
+                        <else>
+                            <set field="DeliveryType" value="2" type="Integer"/>
+                        </else>
+                    </if>
+                    <if condition="orderMap.payments[0].paymentMethodTypeId == 'EXT_SHOP_CASH_ON_DEL'">
+                        <set field="PaymentType" value="2" type="Integer"/>
+                        <else>
+                            <set field="PaymentType" value="1" type="Integer"/>
+                        </else>
+                    </if>
+                        <set field="TotalDiscAmt" value="0" type="Integer"/>
+
+                        <set field="itemMap" from="[
+                            OrigPrice : shipmentItems.unitPrice,
+                            OrigTax : itemSalesTax,
+                            Price : price,
+                            Tax : itemSalesTax,
+                            Qty : shipmentItems.itemQuantity,
+                            StoreOrig : shipmentItems.facilityExternalId,
+                            StoreDest : shipmentItems.facilityExternalId
+                        ]"/>
+                        <set field="items" from="items+itemMap"/>
+                </iterate>
+
+                <set field="CustomerShipping" from="[
+                    FirstName : ShipmentList[0].shipTo.toName,
+                    LastName : '',
+                    Email : ShipmentList[0].shipTo.email,
+                    Address1 : ShipmentList[0].shipTo.address1,
+                    Address2 : ShipmentList[0].shipTo.address2,
+                    City : ShipmentList[0].shipTo.city,
+                    Country : ShipmentList[0].shipTo.countryGeoCode,
+                    NoDocument : noDocument,
+                    TypeDocument : TypeDocument,
+                    Phone : ShipmentList[0].shipTo.phone.contactNumber
+                ]"/>
+                
+                <set field="CustomerBilling" from="[
+                FirstName : billingFirstName,
+                LastName : billingLastName,
+                Email : orderMap.billTo.email,
+                Address1 : orderMap.billTo.address1,
+                Address2 : orderMap.billTo.address2,
+                City : orderMap.billTo.city,
+                Country : orderMap.billTo.countryGeoCode,
+                NoDocument : noDocument,
+                TypeDocument : TypeDocument,
+                Phone : orderMap.billTo.phone.contactNumber
+                ]"/>
+
+
+                <set field="finalInvoice" from="[
+                InvoicingStore : InvoicingStore,
+                OrderNo : orderMap.orderName,
+                OrderId : orderMap.orderId,
+                CreatedDate : orderMap.orderDate,
+                DeliveryType : DeliveryType,
+                PaymentType : PaymentType,
+                TotalAmt : orderMap.grandTotal,
+                TotalDiscAmt : itemDiscountAmount,
+                ShippingAmt : ShippingAmt,
+                EmployeeCode : EmployeeCode,
+                FiscalCredit : FiscalCredit,
+                CompanyId : CompanyId,
+                CompanyName : CompanyName,
+                CompanyAddress : CompanyAddress,
+                CustomerBilling : CustomerBilling,
+                CustomerShipping : CustomerShipping,
+                Items : items
+                ]"/>
+            </iterate>
+
+        </actions>
+
+    </service>
+
 </services>
