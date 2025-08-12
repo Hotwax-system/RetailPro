@@ -29,7 +29,7 @@
              valueAppend = 'P'
              }
 
-             if (it.shipmentId?.startsWith("M")) {
+             if (it.shipmentId.startsWith("M")) {
              it.shipmentId = valueAppend + it.shipmentId.substring(1)
              } else {
              it.shipmentId = valueAppend + it.shipmentId
@@ -89,6 +89,22 @@
                     <set field="shipment.Items" from="Items"/>
                 </if>
                     <set field="manualApiPayLoad" from="manualApiPayLoad + shipment"/>
+
+                <log message="${shipment}"/>
+
+                <service-call name="retailpro.Apicall.get#ManualApiCall" in-map="[payload:shipment]"  out-map="response"/>
+                <if condition="response.statusCode == 200">
+                    <log message="Bhai success hein yee party "/>
+                    <else>
+                        <!-- Implement a logic for solr indexing -->
+                    </else>
+                </if>
+            </iterate>
+            
+            <iterate list="manualApiPayLoad" entry="payload">
+                <log message="${payload}"/>
+                <log message="here we are"/>
+
             </iterate>
         </actions>
     </service>
@@ -101,8 +117,10 @@
         </in-parameters>
         <out-parameters>
             <parameter name="finalInvoice"/>
+            <parameter name="solrpayload"/>
+<!--            <parameter name="groupedList"/>-->
         </out-parameters>
-        
+
         <actions>
             <script>
                 import groovy.json.JsonSlurper
@@ -173,16 +191,24 @@
                 </if>
             </iterate>
             </if>
-
-
+            
             <iterate list="groupedList" entry="ShipmentList">
                 <set field="price" value="0" type="Integer"/>
                 <set field="items" from="[]"/>
                 <iterate list="ShipmentList" entry="shipmentItems">
                     <set field="itemDiscountAmount" value="0" type="Integer"/>
                     <set field="itemSalesTax" value="0" type="Integer"/>
+                    
+                    <!-- Item UPCA -->
+                    <iterate list="shipmentItems.goodIdentifications" entry="goodIdentification">
+                        <set field="UPC" value="" type="String"/>
+                        <if condition="goodIdentification.goodIdentificationTypeId == 'UPCA'">
+                            <set field="UPC" from="goodIdentification.idValue" />
+                        </if>
+                    </iterate>
+
+                    <if condition="shipmentItems.orderItemAdjustments != null">
                     <iterate list="shipmentItems.orderItemAdjustments" entry="orderItemAdjustments">
-                        <if condition="shipmentItems.orderItemAdjustments != null">
                             <set field="itemDiscount" value="0"/>
                             <iterate list="shipmentItems.orderItemAdjustments" entry="orderItemAdjustment">
                                 <if condition="orderItemAdjustment.orderAdjustmentTypeId == 'EXT_PROMO_ADJUSTMENT'">
@@ -190,17 +216,19 @@
                                 </if>
 
                                 <set field="price" from="shipmentItems.unitPrice+itemDiscount"/>
-
                                 <if condition="orderItemAdjustments.orderAdjustmentTypeId == 'EXT_PROMO_ADJUSTMENT'">
                                     <set field="itemDiscountAmount" from="(itemDiscountAmount + orderItemAdjustments.amount)*(-1)"/>
                                 </if>
                                 <if condition="orderItemAdjustments.orderAdjustmentTypeId == 'SALES_TAX'">
                                     <set field="itemSalesTax" from="itemSalesTax + orderItemAdjustments.amount"/>
                                 </if>
+                                
                             </iterate>
-                        </if>
-                        <set field="items" from="items+itemMap"/>
                     </iterate>
+                        <else>
+                            <set field="price" from="shipmentItems.unitPrice+price"/>
+                        </else>
+                </if>
 
                     <set field="InvoicingStore" from="ShipmentList[0].facilityExternalId"/>
                     <if condition="ShipmentList[0].shipmentMethodTypeId == 'STOREPICKUP'">
@@ -218,6 +246,7 @@
                         <set field="TotalDiscAmt" value="0" type="Integer"/>
 
                         <set field="itemMap" from="[
+                            UPC : UPC,
                             OrigPrice : shipmentItems.unitPrice,
                             OrigTax : itemSalesTax,
                             Price : price,
@@ -256,10 +285,10 @@
                 ]"/>
 
 
-                <set field="finalInvoice" from="[
+                <set field="finalInvoiceMap" from="[
                 InvoicingStore : InvoicingStore,
                 OrderNo : orderMap.orderName,
-                OrderId : orderMap.orderId,
+                OrderId : orderMap.orderExternalId,
                 CreatedDate : orderMap.orderDate,
                 DeliveryType : DeliveryType,
                 PaymentType : PaymentType,
@@ -275,6 +304,51 @@
                 CustomerShipping : CustomerShipping,
                 Items : items
                 ]"/>
+                <set field="finalInvoice" from="finalInvoice + finalInvoiceMap"/>
+
+                <service-call name="retailpro.Apicall.get#InvoiceApiCall" in-map="[payload : finalInvoiceMap]" out-map="response"/>
+
+                <if condition="response.statusCode == 200">
+                    <log message="Success"/>
+
+                    <else>
+                        <set field="coreName" value="logInsights"/>
+                        <set field="request_txt_en" from="finalInvoiceMap"/>
+                        <set field="primaryField_txt_en" value="OrderNo"/>
+                        <set field="primaryEntity_txt_en" value="OrderHeader"/>
+                        <set field="_ttl_" value="+60DAYS"/>
+                        <set field="comment" value="Order To Invoice Logs for all brands of ADOC SV"/>
+                        <set field="docType" value="ORDER_TO_INVOICE_API"/>
+                        <set field="id" from="finalInvoiceMap.OrderNo"/>
+                        <log message="${response.header.Pragma}"/>
+                        <log message="Inside else"/>
+                        <if condition="response?.header?.invokehttp?.java?.exception?.class">
+                            <set field="response_txt_en" from="response.header.invokehttp.java.exception.message"/>
+                            <set field="statusCode_txt_en" value="408"/>
+                            <set field="status_txt_en" value="failed"/>
+                            <else>
+                                <set field="response_txt_en" from="response.message"/>
+                                <set field="statusCode_txt_en" value="200"/>
+                                <set field="status_txt_en" value="success"/>
+                            </else>
+                        </if>
+
+                        <set field="solrpayload" from="[
+                            coreName : coreName,
+                            docType : docType,
+                            _ttl_ : _ttl_,
+                            id : id,
+                            status_txt_en : status_txt_en,
+                            request_txt_en : request_txt_en,
+                            statusCode_txt_en : statusCode_txt_en,
+                            response_txt_en : response_txt_en,
+                            primaryEntity_txt_en : primaryEntity_txt_en,
+                            primaryField_txt_en : primaryField_txt_en,
+                            comment : comment,
+                            createdDate : response.createdDate
+                        ]"/>
+                    </else>
+                </if>
             </iterate>
 
         </actions>

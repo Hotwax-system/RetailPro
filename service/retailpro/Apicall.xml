@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+    <!-- Service for manual api call -->
+    <service verb="get" noun="ManualApiCall">
+        <in-parameters>
+            <parameter name="payload" type="Map"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="message"/>
+            <parameter name="statusCode"/>
+        </out-parameters>
+        <actions>
+            <set field="url" value="http://201.150.84.11:9009/api/v1/Transfer/Slip"/>
+            <script>
+                import org.moqui.util.RestClient
+                RestClient restClient = ec.service.rest()
+
+                restClient.method("POST")
+                restClient.uri(url)
+
+                restClient.addHeader("Content-Type","application/json");
+
+                restClient.jsonObject(payload)
+
+
+                system.println ("________________________________sldfnkln_____________________")
+                system.println(payload)
+                system.println ("___________________________slfn__________________________")
+
+
+                try {
+                RestClient.RestResponse restResponse = restClient.call()
+                statusCode = restResponse.statusCode
+                system.println("_____________________________________________________")
+                system.println(restResponse.statusCode)
+                system.println("_____________________________________________________")
+
+                message = restResponse.text()
+                } catch (Exception e) {
+                ec.logger.error("Error in API call, StatusCode: ${statusCode}, Error: ${e}")
+                }
+
+
+
+            </script>
+        </actions>
+    </service>
+
+        <!-- Order to invoice api call -->
+    <service verb="get" noun="InvoiceApiCall">
+        <in-parameters>
+            <parameter name="payload" type="Map"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="statusCode"/>
+            <parameter name="message"/>
+            <parameter name="header"/>
+            <parameter name="createdDate"/>
+        </out-parameters>
+
+        <actions>
+            <set field="url" value="http://201.150.84.13:9100/api/v1/Document/OrderToInvoice"/>
+            <script>
+                import java.time.*
+                import java.time.format.DateTimeFormatter
+                import org.moqui.util.RestClient
+                RestClient restClient = ec.service.rest()
+
+                restClient.method("POST")
+                restClient.uri(url)
+
+                restClient.addHeader("Content-Type","application/json");
+
+                restClient.jsonObject(payload)
+
+                system.println ("________________________________sldfnkln_____________________")
+                system.println(payload)
+                system.println ("___________________________slfn__________________________")
+
+                try {
+                RestClient.RestResponse restResponse = restClient.call()
+                statusCode = restResponse.statusCode
+                header = restResponse.headers()
+                system.println("_________________________________________________775775775775775775775040234902304**************************************************____")
+<!--                system.println(restResponse.body())-->
+
+                system.println("_____________________________________________________")
+                message = restResponse.text()
+
+                createdDate = ZonedDateTime.now(ZoneOffset.UTC)
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'"))
+
+                system.println("_____________________________________________________")
+                system.println(response)
+
+                system.println("_____________________________________________________")
+
+                } catch (Exception e) {
+                ec.logger.error("Error in API call, StatusCode: ${statusCode}, Error: ${e}")
+                }
+
+            </script>
+        </actions>
+    </service>
+
+</services>
