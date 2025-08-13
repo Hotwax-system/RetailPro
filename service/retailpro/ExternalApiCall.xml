@@ -8,11 +8,14 @@
         <out-parameters>
             <parameter name="message"/>
             <parameter name="statusCode"/>
+            <parameter name="shipment"/>
         </out-parameters>
         <actions>
             <set field="url" value="http://201.150.84.11:9009/api/v1/Transfer/Slip"/>
             <script>
                 import org.moqui.util.RestClient
+                import groovy.json.JsonSlurper
+                import groovy.json.JsonOutput
                 RestClient restClient = ec.service.rest()
 
                 restClient.method("POST")
@@ -22,26 +25,19 @@
 
                 restClient.jsonObject(payload)
 
-
-                system.println ("________________________________sldfnkln_____________________")
-                system.println(payload)
-                system.println ("___________________________slfn__________________________")
-
-
                 try {
                 RestClient.RestResponse restResponse = restClient.call()
                 statusCode = restResponse.statusCode
-                system.println("_____________________________________________________")
-                system.println(restResponse.statusCode)
-                system.println("_____________________________________________________")
 
-                message = restResponse.text()
+                rawJsonMessage = restResponse.text()
+                def parsedMessageJson = new JsonSlurper().parseText(rawJsonMessage)
+                message = JsonOutput.toJson(parsedMessageJson).replace('"', '\\"')
+
+                shipment = JsonOutput.toJson(payload).replace('"', '\\"')
+
                 } catch (Exception e) {
                 ec.logger.error("Error in API call, StatusCode: ${statusCode}, Error: ${e}")
                 }
-
-
-
             </script>
         </actions>
     </service>
@@ -56,6 +52,7 @@
             <parameter name="message"/>
             <parameter name="header"/>
             <parameter name="createdDate"/>
+            <parameter name="shipment"/>
         </out-parameters>
 
         <actions>
@@ -64,6 +61,9 @@
                 import java.time.*
                 import java.time.format.DateTimeFormatter
                 import org.moqui.util.RestClient
+                import groovy.json.JsonSlurper
+                import groovy.json.JsonOutput
+
                 RestClient restClient = ec.service.rest()
 
                 restClient.method("POST")
@@ -73,32 +73,52 @@
 
                 restClient.jsonObject(payload)
 
-                system.println ("________________________________sldfnkln_____________________")
-                system.println(payload)
-                system.println ("___________________________slfn__________________________")
-
                 try {
                 RestClient.RestResponse restResponse = restClient.call()
                 statusCode = restResponse.statusCode
                 header = restResponse.headers()
-                system.println("_________________________________________________775775775775775775775040234902304**************************************************____")
-<!--                system.println(restResponse.body())-->
 
-                system.println("_____________________________________________________")
-                message = restResponse.text()
+                rawJsonMessage = restResponse.text()
+                def parsedMessageJson = new JsonSlurper().parseText(rawJsonMessage)
+                message = JsonOutput.toJson(parsedMessageJson).replace('"', '\\"')
+
+                shipment = JsonOutput.toJson(payload).replace('"', '\\"')
 
                 createdDate = ZonedDateTime.now(ZoneOffset.UTC)
                 .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'"))
-
-                system.println("_____________________________________________________")
-                system.println(response)
-
-                system.println("_____________________________________________________")
 
                 } catch (Exception e) {
                 ec.logger.error("Error in API call, StatusCode: ${statusCode}, Error: ${e}")
                 }
 
+            </script>
+        </actions>
+    </service>
+
+        <!-- solr order indexing api call -->
+    <service verb="post" noun="SolrOrderIndex">
+        <in-parameters>
+            <parameter name="orderPayload"/>
+        </in-parameters>
+
+        <actions>
+            <set field="url" value="https://localhost:8443/api/service/addDataToSearchIndex"/>
+            <script>
+                import org.moqui.util.RestClient
+                RestClient restClient = ec.service.rest()
+
+                restClient.method("POST")
+                restClient.uri(url)
+
+                restClient.addHeader("Content-Type","application/json");
+                restClient.jsonObject(orderPayload)
+
+                try {
+                RestClient.RestResponse restResponse = restClient.call()
+                message = restResponse.text()
+                } catch (Exception e) {
+                ec.logger.error("Error in API call, StatusCode: ${statusCode}, Error: ${e}")
+                }
             </script>
         </actions>
     </service>

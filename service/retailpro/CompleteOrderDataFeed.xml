@@ -124,10 +124,10 @@
                     <set field="totalAdjustment" type="Integer" from="totalAdjustment + adj.amount"/>
                 </iterate>
             </iterate>
-            <entity-find entity-name="org.apache.ofbiz.order.order.OrderItem" list="orderItem">
-                <econdition field-name="orderId" from="context.orderId" />
-                <econdition field-name="statusId" operator="not-equals" value="ITEM_CANCELLED"/>
-            </entity-find>
+<!--            <entity-find entity-name="org.apache.ofbiz.order.order.OrderItem" list="orderItem">-->
+<!--                <econdition field-name="orderId" from="context.orderId" />-->
+<!--                <econdition field-name="statusId" operator="not-equals" value="ITEM_CANCELLED"/>-->
+<!--            </entity-find>-->
             <if condition="orderItem">
                 <set field="itemTotalPrice" value="0" type="Integer"/>
                 <iterate list="orderItem" entry="orderitem">
@@ -148,7 +148,7 @@
         </actions>
     </service>
 
-    <!--    Service for fetch shipment information-->
+    <!--   Service for fetch the completed orders feed and combine all the data-->
     <service verb="get" noun="CompleteOrderFeed">
         <in-parameters>
             <parameter name="orderId"/>

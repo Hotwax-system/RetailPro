@@ -6,7 +6,8 @@
         </in-parameters>
         <out-parameters>
             <parameter name="manualApiPayLoad"/>
-            <parameter name="groupedList"/>
+<!--            <parameter name="groupedList"/>-->
+<!--            <parameter name="solrpayload"/>-->
         </out-parameters>
         <actions>
          <script>
@@ -92,11 +93,47 @@
 
                 <log message="${shipment}"/>
 
-                <service-call name="retailpro.Apicall.get#ManualApiCall" in-map="[payload:shipment]"  out-map="response"/>
+                <service-call name="retailpro.ExternalApiCall.get#ManualApiCall" in-map="[payload:shipment]" out-map="response"/>
                 <if condition="response.statusCode == 200">
-                    <log message="Bhai success hein yee party "/>
                     <else>
-                        <!-- Implement a logic for solr indexing -->
+                        <set field="coreName" value="logInsights"/>
+                        <log message="${response.shipment}"/>
+                        <log message="---------------------------------lnflsnldfknlnflnsldfnlsnflsfdlnlsdnflsdfl----------------------------------------"/>
+
+                        <set field="request_txt_en" from="response.shipment"/>
+                        <set field="primaryField_txt_en" value="OrderId"/>
+                        <set field="primaryEntity_txt_en" value="OrderHeader"/>
+                        <set field="_ttl_" value="+60DAYS"/>
+                        <set field="comment" value="Manual Slip API Logs for all brands of ADOC SV"/>
+                        <set field="docType" value="MANUAL_SLIP_API"/>
+                        <set field="id" from="shipment.OrderId"/>
+
+                        <if condition="response?.header?.invokehttp?.java?.exception?.class">
+                            <set field="response_txt_en" from="response.header.invokehttp.java.exception.message"/>
+                            <set field="statusCode_txt_en" value="408"/>
+                            <set field="status_txt_en" value="failed"/>
+                            <else>
+                                <set field="response_txt_en" from="response.message"/>
+                                <set field="statusCode_txt_en" value="200"/>
+                                <set field="status_txt_en" value="success"/>
+                            </else>
+                        </if>
+                        <set field="data" from="[
+                            docType : docType,
+                            _ttl_ : _ttl_,
+                            id : id,
+                            status_txt_en : status_txt_en,
+                            request_txt_en : request_txt_en,
+                            statusCode_txt_en : statusCode_txt_en,
+                            response_txt_en : response_txt_en,
+                            primaryEntity_txt_en : primaryEntity_txt_en,
+                            primaryField_txt_en : primaryField_txt_en,
+                            comment : comment,
+                            createdDate : response.createdDate]"/>
+                        <set field="solrpayload" from="[
+                            coreName : coreName,
+                            data : [data]
+                        ]"/>
                     </else>
                 </if>
             </iterate>
@@ -129,7 +166,7 @@
 
                 def billingName = data.billTo.toName?.split(" ", 2)
                 context.billingFirstName = billingName ? billingName[0] : data.billTo.toName
-                context.billingLastName = billingName.size() > 1 ? billingName[1] : ""
+                context.billingLastName = billingName?.size() > 1 ? billingName[1] : ""
 
                 context.orderMap = data
 
@@ -306,22 +343,20 @@
                 ]"/>
                 <set field="finalInvoice" from="finalInvoice + finalInvoiceMap"/>
 
-                <service-call name="retailpro.Apicall.get#InvoiceApiCall" in-map="[payload : finalInvoiceMap]" out-map="response"/>
+                <service-call name="retailpro.ExternalApiCall.get#InvoiceApiCall" in-map="[payload : finalInvoiceMap]" out-map="response"/>
 
                 <if condition="response.statusCode == 200">
                     <log message="Success"/>
 
                     <else>
                         <set field="coreName" value="logInsights"/>
-                        <set field="request_txt_en" from="finalInvoiceMap"/>
+                        <set field="request_txt_en" from="response.shipment"/>
                         <set field="primaryField_txt_en" value="OrderNo"/>
                         <set field="primaryEntity_txt_en" value="OrderHeader"/>
                         <set field="_ttl_" value="+60DAYS"/>
                         <set field="comment" value="Order To Invoice Logs for all brands of ADOC SV"/>
                         <set field="docType" value="ORDER_TO_INVOICE_API"/>
                         <set field="id" from="finalInvoiceMap.OrderNo"/>
-                        <log message="${response.header.Pragma}"/>
-                        <log message="Inside else"/>
                         <if condition="response?.header?.invokehttp?.java?.exception?.class">
                             <set field="response_txt_en" from="response.header.invokehttp.java.exception.message"/>
                             <set field="statusCode_txt_en" value="408"/>
@@ -332,9 +367,7 @@
                                 <set field="status_txt_en" value="success"/>
                             </else>
                         </if>
-
-                        <set field="solrpayload" from="[
-                            coreName : coreName,
+                        <set field="data" from="[
                             docType : docType,
                             _ttl_ : _ttl_,
                             id : id,
@@ -345,8 +378,12 @@
                             primaryEntity_txt_en : primaryEntity_txt_en,
                             primaryField_txt_en : primaryField_txt_en,
                             comment : comment,
-                            createdDate : response.createdDate
+                            createdDate : response.createdDate]"/>
+                        <set field="solrpayload" from="[
+                            coreName : coreName,
+                            data : [data]
                         ]"/>
+                        <service-call name="retailpro.ExternalApiCall.post#SolrOrderIndex" in-map="[orderPayload : solrpayload]"/>
                     </else>
                 </if>
             </iterate>
