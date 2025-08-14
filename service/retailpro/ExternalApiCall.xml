@@ -11,7 +11,7 @@
             <parameter name="shipment"/>
         </out-parameters>
         <actions>
-            <set field="url" value="http://201.150.84.11:9009/api/v1/Transfer/Slip"/>
+            <set field="url" value="http://201.150.84.13:9100/api/v1/Transfer/Slip"/>
             <script>
                 import org.moqui.util.RestClient
                 import groovy.json.JsonSlurper
@@ -56,7 +56,7 @@
         </out-parameters>
 
         <actions>
-            <set field="url" value="http://201.150.84.13:9100/api/v1/Document/OrderToInvoice"/>
+            <set field="url" value="http://201.150.84.13:9100/api/v1/Document/Ordertoinvoice"/>
             <script>
                 import java.time.*
                 import java.time.format.DateTimeFormatter
@@ -96,13 +96,13 @@
     </service>
 
         <!-- solr order indexing api call -->
-    <service verb="post" noun="SolrOrderIndex">
+    <service verb="post" noun="SolrOrderIndex" authenticate="anonymous-all">
         <in-parameters>
-            <parameter name="orderPayload"/>
+            <parameter name="orderPayload" type="Map"/>
         </in-parameters>
 
         <actions>
-            <set field="url" value="https://localhost:8443/api/service/addDataToSearchIndex"/>
+            <set field="url" value="https://localhost:8443/api/service/addDataToSearchIndex" />
             <script>
                 import org.moqui.util.RestClient
                 RestClient restClient = ec.service.rest()
@@ -110,13 +110,20 @@
                 restClient.method("POST")
                 restClient.uri(url)
 
+                system.println("we are inside the solr api call")
+                system.println(orderPayload)
+
                 restClient.addHeader("Content-Type","application/json");
+                restClient.addHeader("Authorization", "Basic aG90d2F4LnVzZXI6aG90d2F4QDc4Ng==")
                 restClient.jsonObject(orderPayload)
 
                 try {
                 RestClient.RestResponse restResponse = restClient.call()
                 message = restResponse.text()
+                system.println(message)
+
                 } catch (Exception e) {
+                system.println("exception")
                 ec.logger.error("Error in API call, StatusCode: ${statusCode}, Error: ${e}")
                 }
             </script>

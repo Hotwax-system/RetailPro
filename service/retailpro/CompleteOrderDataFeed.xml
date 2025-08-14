@@ -195,7 +195,6 @@
                 <iterate list="orderItemShipGroup" entry="oisg">
                     <entity-find-one entity-name="org.apache.ofbiz.product.facility.Facility" value-field="facility">
                         <field-map field-name="facilityId" from="oisg.facilityId" />
-
                     </entity-find-one>
                     <entity-find-one entity-name="org.apache.ofbiz.product.facility.FacilityType" value-field="facilityType">
                         <field-map field-name="facilityTypeId" from="facility.facilityTypeId"/>
